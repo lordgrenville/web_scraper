@@ -6,6 +6,7 @@ import mysql.connector
 
 import bs4
 from dateutil import parser
+import quandl_api
 
 """
 Scrapes Secret Tel Aviv jobs board, adds new jobs into a database
@@ -91,17 +92,41 @@ def data_cleanser(result):
     return result
 
 
-def update_db(result):
+def enrich_data(raw_data):
+    """enriching through an API"""
+    tickers = {}
+    for item in raw_data:
+        name = item[1]  # company is in position 1
+        ticker = quandl_api.ticker_query(name)
+        if ticker is not None:
+            item.append(True)
+            if ticker not in tickers.keys():
+                stock_data = quandl_api.stock_lookup(ticker)
+                if stock_data is not None:
+                    tickers[ticker] = stock_data
+        else:
+            item.append(False)
+    return raw_data, tickers
+
+
+def update_db(listings, tickers):
     """
     moves the data to a permanent record
     """
     username = 'root'
     password = 'root'
 
-    # convert nested lists into tuples (for sql import)
-    new_result = [tuple(l) for l in result]
+    # convert listings (nested lists) into tuples (for sql import)
+    listing_tuples = [tuple(l) for l in listings]
 
-    # it's relational DB time!
+    # convert tickers (a dict of series) into tuples (for sql import)
+    tickers_list = []
+    for key in tickers.keys():
+        temp = [key] + tickers[key].tolist()
+        tickers_list.append(temp)
+    tickers_tuples = [tuple(l) for l in tickers_list]
+
+    # connect to MySQL
     con = mysql.connector.connect(user=username, password=password,
                                   database='jobs')
     cursor = con.cursor()
@@ -111,18 +136,23 @@ def update_db(result):
     cursor.execute("""SELECT distinct Title, Company from jobs;""")
     current_by_unique_id = [row for row in cursor]
 
-    new_result_by_unique_id = list((a[0], a[1]) for a in new_result)
+    new_by_unique_id = list((a[0], a[1]) for a in listing_tuples)
     to_add = []
-    for index, elem in enumerate(new_result_by_unique_id):
+    for index, elem in enumerate(new_by_unique_id):
         if elem not in current_by_unique_id:
-            to_add.append(new_result[index])
+            to_add.append(listing_tuples[index])
 
     # the injection...
     insertion = """INSERT INTO jobs (Title, Company, Location, Type,
-        Date_Posted, Public) VALUES (%s,%s,%s,%s,%s, %s)"""
+        Date_Posted, Public) VALUES (%s,%s,%s,%s,%s,%s)"""
+
+    ticker_insertion = """INSERT INTO companies (name,day_open, high,low,
+        day_close,volume,ex_dividend,split_ratio,adj_open,adj_high,adj_low,
+        adj_close,adj_volume) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"""
 
     try:
         cursor.executemany(insertion, to_add)
+        cursor.executemany(ticker_insertion, tickers_tuples)
         con.commit()
     except Exception as e:
         print e

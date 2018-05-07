@@ -2,9 +2,8 @@
 import quandl
 import requests
 import json
-from quandl.errors.quandl_error import NotFoundError
-# quandl.ApiConfig.api_key = "XXXXXXXXXXX" # not always needed
-# quandl.ApiConfig.api_version = '2015-04-09'
+# quandl.ApiConfig.api_key = "G8yT1Es4LcyARrmBzP8g"  # not always needed
+quandl.ApiConfig.api_version = '2015-04-09'
 
 
 def ticker_query(company):
@@ -21,13 +20,12 @@ def ticker_query(company):
     return ticker
 
 
-def stock_lookup(company):
+def stock_lookup(ticker):
     """hit quandl API with ticker, get 1st row of data"""
-    ticker = ticker_query(company)
     try:
-        mydata = quandl.get("WIKI/%s" % ticker, rows=5)
+        mydata = quandl.get("WIKI/%s" % ticker, rows=1)
         return mydata.iloc[0]
-    except (NotFoundError, ValueError):
+    except (RuntimeError, ValueError):
         return None
 
 
