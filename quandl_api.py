@@ -2,7 +2,7 @@
 import quandl
 import requests
 import json
-# quandl.ApiConfig.api_key = "G8yT1Es4LcyARrmBzP8g"  # not always needed
+quandl.ApiConfig.api_key = "XXXXXXXXXXX"  # not always needed
 quandl.ApiConfig.api_version = '2015-04-09'
 
 

@@ -3,6 +3,7 @@ library of functions for job scraper
 """
 import requests
 import mysql.connector
+import datetime
 
 import bs4
 from dateutil import parser
@@ -123,6 +124,7 @@ def update_db(listings, tickers):
     tickers_list = []
     for key in tickers.keys():
         temp = [key] + tickers[key].tolist()
+        temp.insert(1,datetime.datetime.today().strftime('%Y-%m-%d'))
         tickers_list.append(temp)
     tickers_tuples = [tuple(l) for l in tickers_list]
 
@@ -146,9 +148,9 @@ def update_db(listings, tickers):
     insertion = """INSERT INTO jobs (Title, Company, Location, Type,
         Date_Posted, Public) VALUES (%s,%s,%s,%s,%s,%s)"""
 
-    ticker_insertion = """INSERT INTO companies (name,day_open, high,low,
+    ticker_insertion = """INSERT INTO companies (name,day, day_open, high,low,
         day_close,volume,ex_dividend,split_ratio,adj_open,adj_high,adj_low,
-        adj_close,adj_volume) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"""
+        adj_close,adj_volume) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"""
 
     try:
         cursor.executemany(insertion, to_add)
