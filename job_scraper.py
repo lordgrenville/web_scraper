@@ -13,6 +13,12 @@ import quandl_api
 Scrapes Secret Tel Aviv jobs board, adds new jobs into a database
 """
 
+JOBS_COLUMNS = ['Title', 'Company', 'Location', 'Type', 'Date_Posted',
+                'Public']
+COMPANY_COLUMNS = ['name','day', 'day_open', 'high','low', 'day_close',
+                   'volume','ex_dividend','split_ratio','adj_open','adj_high',
+                   'adj_low', 'adj_close','adj_volume']
+
 
 def remove_value_from_list(the_list, val):
     """
@@ -110,51 +116,57 @@ def enrich_data(raw_data):
     return raw_data, tickers
 
 
-def update_db(listings, tickers):
-    """
-    moves the data to a permanent record
-    """
-    username = 'root'
-    password = 'root'
-
-    # convert listings (nested lists) into tuples (for sql import)
+def tuple_conversion(listings, tickers):
+    """convert into tuples (for sql import)"""
     listing_tuples = [tuple(l) for l in listings]
 
-    # convert tickers (a dict of series) into tuples (for sql import)
     tickers_list = []
+    # add time
     for key in tickers.keys():
         temp = [key] + tickers[key].tolist()
         temp.insert(1,datetime.datetime.today().strftime('%Y-%m-%d'))
         tickers_list.append(temp)
     tickers_tuples = [tuple(l) for l in tickers_list]
+    return (listing_tuples, tickers_tuples)
 
-    # connect to MySQL
+def formulate_insertion(column_list):
+    """make well-formed MySQL insertion"""
+    insertion = "INSERT INTO jobs (" + ", ".join(column_list) + ") VALUES " + \
+                "(" + "%s," * (len(column_list) - 1) + "%s)"
+    return insertion
+
+def compare_results(old, new):
+    """remove results already in table"""
+    current_by_unique_id = [row for row in old]
+
+    new_by_unique_id = list((a[0], a[1]) for a in new)
+    to_add = []
+    for index, elem in enumerate(new_by_unique_id):
+        if elem not in current_by_unique_id:
+            to_add.append(new[index])
+    return new
+
+
+def update_db(listing_tuples, ticker_tuples):
+    """
+    moves the data to a permanent record
+    """
+    username = 'root'
+    password = 'root'
     con = mysql.connector.connect(user=username, password=password,
                                   database='jobs')
     cursor = con.cursor()
 
     # before inserting, we'll check the records aren't in here already
-    # taking title + company as unique identifiers
     cursor.execute("""SELECT distinct Title, Company from jobs;""")
-    current_by_unique_id = [row for row in cursor]
+    to_add = compare_results(cursor, listing_tuples)
 
-    new_by_unique_id = list((a[0], a[1]) for a in listing_tuples)
-    to_add = []
-    for index, elem in enumerate(new_by_unique_id):
-        if elem not in current_by_unique_id:
-            to_add.append(listing_tuples[index])
-
-    # the injection...
-    insertion = """INSERT INTO jobs (Title, Company, Location, Type,
-        Date_Posted, Public) VALUES (%s,%s,%s,%s,%s,%s)"""
-
-    ticker_insertion = """INSERT INTO companies (name,day, day_open, high,low,
-        day_close,volume,ex_dividend,split_ratio,adj_open,adj_high,adj_low,
-        adj_close,adj_volume) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"""
+    insertion = formulate_insertion(JOBS_COLUMNS)
+    ticker_insertion = formulate_insertion(COMPANY_COLUMNS)
 
     try:
         cursor.executemany(insertion, to_add)
-        cursor.executemany(ticker_insertion, tickers_tuples)
+        cursor.executemany(ticker_insertion, ticker_tuples)
         con.commit()
     except Exception as e:
         print e
