@@ -18,8 +18,6 @@ COMPANY_COLS = ['ticker', 'day', 'day_open', 'high', 'low', 'day_close',
                 'volume', 'ex_dividend', 'split_ratio', 'adj_open', 'adj_high',
                 'adj_low', 'adj_close', 'adj_volume']
 
-COMPANY_NAME_COLS = ['ticker', 'name']
-
 
 def remove_value_from_list(the_list, val):
     """
@@ -157,6 +155,15 @@ def update_db(listing_tuples):
     to_add = compare_results(cursor, listing_tuples)
 
     insertion = formulate_insertion("jobs", JOBS_COLS)
+
+    # add new tickers
+    cursor.execute("""SELECT distinct ticker from company_names;""")
+    tickers = [x[0] for x in cursor]
+    for listing in listing_tuples:
+        company_ticker = quandl_api.ticker_query(listing[1])
+        if company_ticker not in tickers and company_ticker is not None:
+            print "New public company - add to table"
+            print company_ticker
 
     # get company names and check stock prices
     cursor.execute("""SELECT distinct ticker from company_names;""")
