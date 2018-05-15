@@ -13,11 +13,12 @@ import quandl_api
 Scrapes Secret Tel Aviv jobs board, adds new jobs into a database
 """
 
-JOBS_COLUMNS = ['Title', 'Company', 'Location', 'Type', 'Date_Posted',
-                'Public']
-COMPANY_COLUMNS = ['name','day', 'day_open', 'high','low', 'day_close',
-                   'volume','ex_dividend','split_ratio','adj_open','adj_high',
-                   'adj_low', 'adj_close','adj_volume']
+JOBS_COLS = ['Title', 'Company', 'Location', 'Type', 'Date_Posted', 'Public']
+COMPANY_COLS = ['ticker', 'day', 'day_open', 'high', 'low', 'day_close',
+                'volume', 'ex_dividend', 'split_ratio', 'adj_open', 'adj_high',
+                'adj_low', 'adj_close', 'adj_volume']
+
+COMPANY_NAME_COLS = ['ticker', 'name']
 
 
 def remove_value_from_list(the_list, val):
@@ -99,11 +100,19 @@ def data_cleanser(result):
     return result
 
 
+def formulate_insertion(column_list):
+    """make well-formed MySQL insertion"""
+    insertion = "INSERT INTO jobs (" + ", ".join(column_list) + ") VALUES " + \
+                "(" + "%s," * (len(column_list) - 1) + "%s)"
+    return insertion
+
+
 def enrich_data(raw_data):
     """enriching through an API"""
     tickers = {}
     for item in raw_data:
         name = item[1]  # company is in position 1
+
         ticker = quandl_api.ticker_query(name)
         if ticker is not None:
             item.append(True)
@@ -124,16 +133,11 @@ def tuple_conversion(listings, tickers):
     # add time
     for key in tickers.keys():
         temp = [key] + tickers[key].tolist()
-        temp.insert(1,datetime.datetime.today().strftime('%Y-%m-%d'))
+        temp.insert(1, datetime.datetime.today().strftime('%Y-%m-%d'))
         tickers_list.append(temp)
     tickers_tuples = [tuple(l) for l in tickers_list]
-    return (listing_tuples, tickers_tuples)
+    return listing_tuples, tickers_tuples
 
-def formulate_insertion(column_list):
-    """make well-formed MySQL insertion"""
-    insertion = "INSERT INTO jobs (" + ", ".join(column_list) + ") VALUES " + \
-                "(" + "%s," * (len(column_list) - 1) + "%s)"
-    return insertion
 
 def compare_results(old, new):
     """remove results already in table"""
@@ -161,8 +165,8 @@ def update_db(listing_tuples, ticker_tuples):
     cursor.execute("""SELECT distinct Title, Company from jobs;""")
     to_add = compare_results(cursor, listing_tuples)
 
-    insertion = formulate_insertion(JOBS_COLUMNS)
-    ticker_insertion = formulate_insertion(COMPANY_COLUMNS)
+    insertion = formulate_insertion(JOBS_COLS)
+    ticker_insertion = formulate_insertion(COMPANY_COLS)
 
     try:
         cursor.executemany(insertion, to_add)
