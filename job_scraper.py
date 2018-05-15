@@ -4,6 +4,7 @@ library of functions for job scraper
 import requests
 import mysql.connector
 import time
+import datetime
 
 import bs4
 from dateutil import parser
@@ -128,7 +129,7 @@ def tuple_conversion(listings):
     return [tuple(l) for l in listings]
 
 
-def compare_results(old, new):
+def prevent_job_duplicates(old, new):
     """remove results already in table"""
     current_by_unique_id = [row for row in old]
 
@@ -152,8 +153,7 @@ def update_db(listing_tuples):
 
     # before inserting, we'll check the records aren't in here already
     cursor.execute("""SELECT distinct Title, Company from jobs;""")
-    to_add = compare_results(cursor, listing_tuples)
-
+    to_add = prevent_job_duplicates(cursor, listing_tuples)
     insertion = formulate_insertion("jobs", JOBS_COLS)
 
     # add new tickers
@@ -165,20 +165,29 @@ def update_db(listing_tuples):
             print "New public company - add to table"
             print company_ticker
 
-    # get company names and check stock prices
-    cursor.execute("""SELECT distinct ticker from company_names;""")
-    stock_tuples = []
+    # check if stocks updated today
+    stock_already_updated = True
+    cursor.execute("""SELECT day FROM companies ORDER BY day DESC LIMIT 1;;""")
     for x in cursor:
-        quote = [x[0], time.strftime('%Y-%m-%d')]
-        if quandl_api.stock_lookup(x) is not None:
-            quote.extend(quandl_api.stock_lookup(x).tolist())
-            stock_tuples.append(tuple(quote))
+        if x[0] == datetime.date.today():
+            pass
+        else:
+            stock_already_updated = False
+            # get company names and check stock prices
+            cursor.execute("""SELECT distinct ticker from company_names;""")
+            stock_tuples = []
+            for x in cursor:
+                quote = [x[0], time.strftime('%Y-%m-%d')]
+                if quandl_api.stock_lookup(x) is not None:
+                    quote.extend(quandl_api.stock_lookup(x).tolist())
+                    stock_tuples.append(tuple(quote))
 
-    stock_insertion = formulate_insertion("companies", COMPANY_COLS)
+            stock_insertion = formulate_insertion("companies", COMPANY_COLS)
 
     try:
         cursor.executemany(insertion, to_add)
-        cursor.executemany(stock_insertion, stock_tuples)
+        if not stock_already_updated:
+            cursor.executemany(stock_insertion, stock_tuples)
         con.commit()
     except Exception as e:
         print e
