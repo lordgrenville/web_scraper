@@ -12,8 +12,8 @@ def run_scraper():
     result = organise(jobs)
     raw_data = data_cleanser(result)
     listings, tickers = enrich_data(raw_data)
-    listing_tuples, ticker_tuples = tuple_conversion(listings, tickers)
-    update_db(listing_tuples, ticker_tuples)
+    listing_tuples = tuple_conversion(listings)
+    update_db(listing_tuples)
 
 
 if __name__ == '__main__':

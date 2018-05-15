@@ -3,7 +3,7 @@ library of functions for job scraper
 """
 import requests
 import mysql.connector
-import datetime
+import time
 
 import bs4
 from dateutil import parser
@@ -100,10 +100,10 @@ def data_cleanser(result):
     return result
 
 
-def formulate_insertion(column_list):
+def formulate_insertion(table_name, column_list):
     """make well-formed MySQL insertion"""
-    insertion = "INSERT INTO jobs (" + ", ".join(column_list) + ") VALUES " + \
-                "(" + "%s," * (len(column_list) - 1) + "%s)"
+    insertion = "INSERT INTO " + table_name + " (" + ", ".join(column_list) +\
+                ") VALUES " + "(" + "%s," * (len(column_list) - 1) + "%s)"
     return insertion
 
 
@@ -125,18 +125,9 @@ def enrich_data(raw_data):
     return raw_data, tickers
 
 
-def tuple_conversion(listings, tickers):
+def tuple_conversion(listings):
     """convert into tuples (for sql import)"""
-    listing_tuples = [tuple(l) for l in listings]
-
-    tickers_list = []
-    # add time
-    for key in tickers.keys():
-        temp = [key] + tickers[key].tolist()
-        temp.insert(1, datetime.datetime.today().strftime('%Y-%m-%d'))
-        tickers_list.append(temp)
-    tickers_tuples = [tuple(l) for l in tickers_list]
-    return listing_tuples, tickers_tuples
+    return [tuple(l) for l in listings]
 
 
 def compare_results(old, new):
@@ -151,7 +142,7 @@ def compare_results(old, new):
     return new
 
 
-def update_db(listing_tuples, ticker_tuples):
+def update_db(listing_tuples):
     """
     moves the data to a permanent record
     """
@@ -165,12 +156,22 @@ def update_db(listing_tuples, ticker_tuples):
     cursor.execute("""SELECT distinct Title, Company from jobs;""")
     to_add = compare_results(cursor, listing_tuples)
 
-    insertion = formulate_insertion(JOBS_COLS)
-    ticker_insertion = formulate_insertion(COMPANY_COLS)
+    insertion = formulate_insertion("jobs", JOBS_COLS)
+
+    # get company names and check stock prices
+    cursor.execute("""SELECT distinct ticker from company_names;""")
+    stock_tuples = []
+    for x in cursor:
+        quote = [x[0], time.strftime('%Y-%m-%d')]
+        if quandl_api.stock_lookup(x) is not None:
+            quote.extend(quandl_api.stock_lookup(x).tolist())
+            stock_tuples.append(tuple(quote))
+
+    stock_insertion = formulate_insertion("companies", COMPANY_COLS)
 
     try:
         cursor.executemany(insertion, to_add)
-        cursor.executemany(ticker_insertion, ticker_tuples)
+        cursor.executemany(stock_insertion, stock_tuples)
         con.commit()
     except Exception as e:
         print e
