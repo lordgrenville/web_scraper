@@ -164,6 +164,7 @@ def update_db(listing_tuples):
         if company_ticker not in tickers and company_ticker is not None:
             print "New public company - add to table"
             print company_ticker
+            print listing[1]
 
     # check if stocks updated today
     stock_already_updated = True
